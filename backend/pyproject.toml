@@ -1,0 +1,42 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = [
+    "test_*.py",
+    "*_test.py",
+    "tests.py",
+]
+testpaths = [
+    "apps",
+    "tests",
+]
+pythonpath = ["."]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [
+    "migrations",
+    ".venv",
+    "staticfiles",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "DJ",
+]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

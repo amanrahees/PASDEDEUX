@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment secrets
+.env
+.env.local
+.env.development
+.env.test
+.env.staging
+.env.production
+
+# Django-generated files
+db.sqlite3
+media/
+staticfiles/
+*.log
+
+# Tests and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Development tools
+.ruff_cache/
+.mypy_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# Operating systems
+.DS_Store
+Thumbs.db
