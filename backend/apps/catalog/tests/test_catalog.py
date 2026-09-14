@@ -3,11 +3,22 @@ from decimal import Decimal
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from ..models import Audience, Category, Product, ProductStatus, ProductType, ProductVariant
+from ..models import (
+    Audience,
+    Category,
+    Product,
+    ProductImage,
+    ProductStatus,
+    ProductType,
+    ProductVariant,
+)
 from ..services import adjust_stock
+from ..validators import validate_product_image_size
 
 
 @pytest.fixture
@@ -114,3 +125,22 @@ def test_stock_adjustment_cannot_drop_below_reserved(active_product):
 
     with pytest.raises(ValidationError):
         adjust_stock(variant_id=variant.pk, quantity_delta=-3)
+
+
+@override_settings(MAX_PRODUCT_IMAGE_BYTES=10)
+def test_product_image_size_limit():
+    upload = SimpleUploadedFile("product.jpg", b"x" * 11, content_type="image/jpeg")
+
+    with pytest.raises(ValidationError):
+        validate_product_image_size(upload)
+
+
+@pytest.mark.django_db
+def test_product_image_extension_is_restricted(active_product):
+    image = ProductImage(
+        product=active_product,
+        image=SimpleUploadedFile("product.gif", b"GIF89a", content_type="image/gif"),
+    )
+
+    with pytest.raises(ValidationError):
+        image.full_clean()

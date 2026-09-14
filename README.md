@@ -17,6 +17,7 @@ eyewear, belts, caps, and accessories for everyone.
   and immutable order/address/item snapshots
 - Wishlists, moderated ratings/reviews, recently viewed products, and recommendations
 - Superuser sales dashboard, moderation APIs, and scheduled low-stock email alerts
+- Validated product image uploads with configurable storage backends
 - Signed Razorpay checkout callbacks and idempotent webhook processing
 - Provider-neutral payment records and shipment tracking
 - PostgreSQL, Redis, Celery workers/beat, Gunicorn, health checks, and OpenAPI documentation
@@ -48,6 +49,11 @@ docker compose exec backend python manage.py createsuperuser
 The API is available at `http://localhost:8000`. Swagger documentation is at
 `/api/docs/` for staff users. Liveness and dependency readiness endpoints are
 `/health/live/` and `/health/ready/`.
+
+Local development stores product media under `backend/media` and serves it only
+when `DEBUG=True`. Uploads are limited to 5 MB and JPG, PNG, or WebP. Production
+can select an installed object-storage backend through `MEDIA_STORAGE_BACKEND`;
+local container storage should not be used for durable production media.
 
 ## Main API routes
 

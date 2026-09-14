@@ -1,8 +1,10 @@
 import uuid
 
-from django.core.validators import MinValueValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
+
+from .validators import validate_product_image_size
 
 
 class Audience(models.TextChoices):
@@ -138,7 +140,13 @@ class ProductImage(models.Model):
         on_delete=models.CASCADE,
         related_name="images",
     )
-    image = models.ImageField(upload_to="products/%Y/%m/")
+    image = models.ImageField(
+        upload_to="products/%Y/%m/",
+        validators=[
+            FileExtensionValidator(("jpg", "jpeg", "png", "webp")),
+            validate_product_image_size,
+        ],
+    )
     alt_text = models.CharField(max_length=255, blank=True)
     position = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
