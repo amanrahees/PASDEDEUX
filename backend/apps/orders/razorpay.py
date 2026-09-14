@@ -80,6 +80,17 @@ def verify_webhook_signature(*, raw_body, signature):
 
 
 @transaction.atomic
+def authorize_payment(*, provider_order_id, provider_payment_id):
+    payment = Payment.objects.select_for_update().get(provider_order_id=provider_order_id)
+    if payment.status == PaymentStatus.CAPTURED:
+        return payment
+    payment.provider_payment_id = provider_payment_id
+    payment.status = PaymentStatus.AUTHORIZED
+    payment.save(update_fields=["provider_payment_id", "status", "updated_at"])
+    return payment
+
+
+@transaction.atomic
 def capture_payment(*, provider_order_id, provider_payment_id):
     payment = (
         Payment.objects.select_for_update()

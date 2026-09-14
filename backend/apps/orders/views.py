@@ -14,6 +14,7 @@ from apps.users.permissions import IsCustomer
 from .models import Cart, CartItem, Order, Payment, PaymentStatus
 from .razorpay import (
     RazorpayError,
+    authorize_payment,
     capture_payment,
     create_razorpay_order,
     record_webhook,
@@ -188,11 +189,11 @@ class RazorpayConfirmView(GenericAPIView):
             signature=data["razorpay_signature"],
         ):
             raise ValidationError({"detail": "Invalid payment signature."})
-        capture_payment(
+        authorize_payment(
             provider_order_id=payment.provider_order_id,
             provider_payment_id=data["razorpay_payment_id"],
         )
-        return response.Response({"detail": "Payment confirmed."})
+        return response.Response({"detail": "Payment authorized; awaiting capture confirmation."})
 
 
 class RazorpayWebhookView(GenericAPIView):
