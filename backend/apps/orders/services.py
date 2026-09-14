@@ -1,10 +1,13 @@
 import hashlib
+from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import F
+from django.utils import timezone
 
 from apps.catalog.models import ProductStatus, ProductVariant
 from apps.customers.models import Address
@@ -13,11 +16,14 @@ from .models import (
     AddressType,
     Cart,
     CartItem,
+    Coupon,
+    DiscountType,
     Order,
     OrderAddress,
     OrderItem,
     OrderStatus,
     Payment,
+    PaymentStatus,
 )
 
 
@@ -70,7 +76,26 @@ def _copy_address(order, address, address_type):
 
 
 @transaction.atomic
-def checkout(*, user, shipping_address_id, billing_address_id, idempotency_key):
+def _discount_for(coupon, subtotal):
+    now = timezone.now()
+    if (
+        not coupon.is_active
+        or not coupon.starts_at <= now < coupon.ends_at
+        or subtotal < coupon.minimum_order_value
+        or (coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit)
+    ):
+        raise ValidationError("This coupon is not available.")
+    if coupon.discount_type == DiscountType.PERCENTAGE:
+        discount = subtotal * coupon.value / Decimal("100")
+    else:
+        discount = coupon.value
+    if coupon.maximum_discount is not None:
+        discount = min(discount, coupon.maximum_discount)
+    return min(discount, subtotal).quantize(Decimal("0.01"))
+
+
+@transaction.atomic
+def checkout(*, user, shipping_address_id, billing_address_id, idempotency_key, coupon_code=""):
     get_user_model().objects.select_for_update().get(pk=user.pk)
     existing = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
     if existing:
@@ -115,11 +140,37 @@ def checkout(*, user, shipping_address_id, billing_address_id, idempotency_key):
         subtotal += line_total
         lines.append((item, variant, unit_price, line_total))
 
+    coupon = None
+    discount_total = Decimal("0.00")
+    if coupon_code:
+        try:
+            coupon = Coupon.objects.select_for_update().get(code__iexact=coupon_code.strip())
+        except Coupon.DoesNotExist as error:
+            raise ValidationError("This coupon is not available.") from error
+        discount_total = _discount_for(coupon, subtotal)
+
+    shipping_address = address_map[shipping_address_id]
+    if shipping_address.country_code == settings.STORE_COUNTRY_CODE:
+        shipping_total = (
+            Decimal("0.00")
+            if subtotal - discount_total >= settings.DOMESTIC_FREE_SHIPPING_THRESHOLD
+            else settings.DOMESTIC_SHIPPING_RATE
+        )
+    else:
+        shipping_total = settings.INTERNATIONAL_SHIPPING_RATE
+    total = subtotal - discount_total + shipping_total
+
     order = Order.objects.create(
         user=user,
         idempotency_key=idempotency_key,
+        coupon=coupon,
+        coupon_code=coupon.code if coupon else "",
         subtotal=subtotal,
-        total=subtotal,
+        discount_total=discount_total,
+        shipping_total=shipping_total,
+        total=total,
+        reservation_expires_at=timezone.now()
+        + timedelta(minutes=settings.STOCK_RESERVATION_MINUTES),
     )
     _copy_address(order, address_map[shipping_address_id], AddressType.SHIPPING)
     _copy_address(order, address_map[billing_address_id], AddressType.BILLING)
@@ -144,6 +195,9 @@ def checkout(*, user, shipping_address_id, billing_address_id, idempotency_key):
         amount=order.total,
         currency=order.currency,
     )
+    if coupon:
+        coupon.times_used = F("times_used") + 1
+        coupon.save(update_fields=["times_used", "updated_at"])
     cart.items.all().delete()
     return order, True
 
@@ -153,11 +207,19 @@ def cancel_order(*, order):
     order = Order.objects.select_for_update().get(pk=order.pk)
     if order.status != OrderStatus.PAYMENT_PENDING:
         raise ValidationError("Only unpaid orders can be cancelled by the customer.")
+    if order.payments.filter(
+        status__in=(PaymentStatus.AUTHORIZED, PaymentStatus.CAPTURED)
+    ).exists():
+        raise ValidationError("A payment is already being processed for this order.")
     for item in order.items.select_related("variant"):
         if item.variant_id:
             ProductVariant.objects.filter(pk=item.variant_id).update(
                 reserved_quantity=F("reserved_quantity") - item.quantity
             )
     order.status = OrderStatus.CANCELLED
+    if order.coupon_id:
+        Coupon.objects.filter(pk=order.coupon_id, times_used__gt=0).update(
+            times_used=F("times_used") - 1
+        )
     order.save(update_fields=["status", "updated_at"])
     return order

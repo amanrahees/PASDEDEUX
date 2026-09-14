@@ -11,14 +11,15 @@ eyewear, belts, caps, and accessories for everyone.
 - Customer profiles and multiple shipping/billing addresses
 - Hierarchical categories, brands, products, images, and SKU variants
 - Audience and fashion product-type filtering, full-text search, and ordering
-- Transaction-safe inventory adjustments and stock reservations
+- Transaction-safe inventory adjustments and 15-minute stock reservations
 - Customer cart with quantity and availability validation
-- Idempotent checkout with immutable order/address/item snapshots
+- Idempotent checkout with coupons, configurable domestic/international shipping,
+  and immutable order/address/item snapshots
+- Signed Razorpay checkout callbacks and idempotent webhook processing
 - Provider-neutral payment records and shipment tracking
-- PostgreSQL, Redis, Celery, Gunicorn, health checks, and OpenAPI documentation
+- PostgreSQL, Redis, Celery workers/beat, Gunicorn, health checks, and OpenAPI documentation
 
-The API never stores card numbers or CVVs. Connect a PCI-compliant payment
-provider to the `Payment` boundary before accepting live payments.
+The API never stores card numbers or CVVs; payment details stay with Razorpay.
 
 ## Local Docker setup
 
@@ -88,7 +89,9 @@ Catalog writes and variant/image management require a staff account.
 - `POST /api/v1/orders/{order_number}/cancel/`
 
 Checkout requires a unique `Idempotency-Key` request header. Repeating the same
-key returns the original order without reserving stock twice.
+key returns the original order without reserving stock twice. Pass an optional
+`coupon_code` in the JSON body. Unpaid reservations expire automatically; the
+Celery worker and beat services must both be running.
 
 ## Filtering examples
 

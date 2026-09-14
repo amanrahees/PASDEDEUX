@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import transaction
 from django.db.models import F
+from django.utils import timezone
 
 from apps.catalog.models import ProductVariant
 
@@ -46,6 +47,11 @@ def create_razorpay_order(payment):
     payment = Payment.objects.select_for_update().select_related("order").get(pk=payment.pk)
     if payment.provider_order_id:
         return payment
+    if (
+        payment.order.reservation_expires_at
+        and payment.order.reservation_expires_at <= timezone.now()
+    ):
+        raise RazorpayError("The stock reservation has expired.")
     result = _request(
         "orders",
         {
@@ -81,9 +87,20 @@ def verify_webhook_signature(*, raw_body, signature):
 
 @transaction.atomic
 def authorize_payment(*, provider_order_id, provider_payment_id):
-    payment = Payment.objects.select_for_update().get(provider_order_id=provider_order_id)
+    payment = (
+        Payment.objects.select_for_update()
+        .select_related("order")
+        .get(provider_order_id=provider_order_id)
+    )
     if payment.status == PaymentStatus.CAPTURED:
         return payment
+    if payment.order.status != OrderStatus.PAYMENT_PENDING:
+        raise ValidationError("The order cannot accept payment in its current state.")
+    if (
+        payment.order.reservation_expires_at
+        and payment.order.reservation_expires_at <= timezone.now()
+    ):
+        raise ValidationError("The stock reservation has expired.")
     payment.provider_payment_id = provider_payment_id
     payment.status = PaymentStatus.AUTHORIZED
     payment.save(update_fields=["provider_payment_id", "status", "updated_at"])

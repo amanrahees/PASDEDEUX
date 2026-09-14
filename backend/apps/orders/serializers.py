@@ -48,6 +48,7 @@ class CheckoutSerializer(serializers.Serializer):
     billing_address = serializers.PrimaryKeyRelatedField(
         queryset=Address.objects.none(), required=False
     )
+    coupon_code = serializers.CharField(max_length=40, allow_blank=True, required=False, default="")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -129,6 +130,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_total",
             "tax_total",
             "total",
+            "coupon_code",
+            "reservation_expires_at",
             "customer_note",
             "items",
             "addresses",

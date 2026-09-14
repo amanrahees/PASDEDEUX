@@ -4,7 +4,7 @@ import uuid
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 from apps.catalog.models import ProductVariant
 
@@ -54,6 +54,50 @@ class OrderStatus(models.TextChoices):
     REFUNDED = "REFUNDED", "Refunded"
 
 
+class DiscountType(models.TextChoices):
+    FIXED = "FIXED", "Fixed amount"
+    PERCENTAGE = "PERCENTAGE", "Percentage"
+
+
+class Coupon(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=40, unique=True)
+    discount_type = models.CharField(max_length=12, choices=DiscountType.choices)
+    value = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    minimum_order_value = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+    maximum_discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0)],
+    )
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    usage_limit = models.PositiveIntegerField(blank=True, null=True)
+    times_used = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("code",)
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(ends_at__gt=F("starts_at")), name="coupon_end_after_start"
+            ),
+            models.CheckConstraint(
+                condition=Q(discount_type="FIXED") | Q(value__lte=100),
+                name="percentage_coupon_not_above_100",
+            ),
+        ]
+
+    def __str__(self):
+        return self.code
+
+
 class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order_number = models.CharField(
@@ -63,6 +107,14 @@ class Order(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
     idempotency_key = models.CharField(max_length=100)
+    coupon = models.ForeignKey(
+        Coupon,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        blank=True,
+        null=True,
+    )
+    coupon_code = models.CharField(max_length=40, blank=True)
     status = models.CharField(
         max_length=24, choices=OrderStatus.choices, default=OrderStatus.PAYMENT_PENDING
     )
@@ -74,6 +126,7 @@ class Order(models.Model):
     total = models.DecimalField(max_digits=12, decimal_places=2)
     customer_note = models.TextField(blank=True)
     placed_at = models.DateTimeField(auto_now_add=True)
+    reservation_expires_at = models.DateTimeField(blank=True, null=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -175,6 +228,7 @@ class PaymentWebhookEvent(models.Model):
     event_type = models.CharField(max_length=100)
     payload = models.JSONField()
     processed_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ("-processed_at",)

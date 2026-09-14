@@ -46,3 +46,4 @@ def test_webhook_is_idempotent():
         assert response.status_code == 200
 
     assert PaymentWebhookEvent.objects.count() == 1
+    assert PaymentWebhookEvent.objects.get().completed_at is not None

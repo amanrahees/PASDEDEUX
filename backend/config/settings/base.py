@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import environ
@@ -282,6 +283,23 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Pasdedeux <no-reply@pasd
 RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
 RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", default="")
 RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
+
+STOCK_RESERVATION_MINUTES = env.int("STOCK_RESERVATION_MINUTES", default=15)
+STORE_COUNTRY_CODE = env("STORE_COUNTRY_CODE", default="IN")
+DOMESTIC_FREE_SHIPPING_THRESHOLD = env(
+    "DOMESTIC_FREE_SHIPPING_THRESHOLD", cast=Decimal, default=Decimal("1999.00")
+)
+DOMESTIC_SHIPPING_RATE = env("DOMESTIC_SHIPPING_RATE", cast=Decimal, default=Decimal("99.00"))
+INTERNATIONAL_SHIPPING_RATE = env(
+    "INTERNATIONAL_SHIPPING_RATE", cast=Decimal, default=Decimal("1499.00")
+)
+
+CELERY_BEAT_SCHEDULE = {
+    "release-expired-stock-reservations": {
+        "task": "apps.orders.tasks.release_expired_reservations",
+        "schedule": 60.0,
+    }
+}
 
 
 # Defaults

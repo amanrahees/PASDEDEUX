@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
@@ -108,6 +109,7 @@ class CheckoutView(GenericAPIView):
                 shipping_address_id=serializer.validated_data["shipping_address"].pk,
                 billing_address_id=serializer.validated_data["billing_address"].pk,
                 idempotency_key=idempotency_key,
+                coupon_code=serializer.validated_data.get("coupon_code", ""),
             )
         except DjangoValidationError as error:
             raise _service_error(error) from error
@@ -213,11 +215,15 @@ class RazorpayWebhookView(GenericAPIView):
             payload = json.loads(request.body)
         except json.JSONDecodeError:
             return response.Response(status=status.HTTP_400_BAD_REQUEST)
-        _, created = record_webhook(event_id=event_id, payload=payload)
-        if created and payload.get("event") == "payment.captured":
+        event, _ = record_webhook(event_id=event_id, payload=payload)
+        if event.completed_at:
+            return response.Response(status=status.HTTP_200_OK)
+        if payload.get("event") == "payment.captured":
             entity = payload["payload"]["payment"]["entity"]
             capture_payment(
                 provider_order_id=entity["order_id"],
                 provider_payment_id=entity["id"],
             )
+        event.completed_at = timezone.now()
+        event.save(update_fields=["completed_at"])
         return response.Response(status=status.HTTP_200_OK)
