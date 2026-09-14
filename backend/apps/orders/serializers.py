@@ -63,6 +63,16 @@ class CheckoutSerializer(serializers.Serializer):
         return attrs
 
 
+class RazorpayOrderSerializer(serializers.Serializer):
+    order_number = serializers.CharField(max_length=20)
+
+
+class RazorpayConfirmSerializer(serializers.Serializer):
+    razorpay_order_id = serializers.CharField(max_length=255)
+    razorpay_payment_id = serializers.CharField(max_length=255)
+    razorpay_signature = serializers.CharField(max_length=255, write_only=True)
+
+
 class OrderAddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderAddress

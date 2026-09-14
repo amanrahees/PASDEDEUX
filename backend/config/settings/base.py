@@ -279,6 +279,10 @@ MAILERS = {
 }
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Pasdedeux <no-reply@pasdedeux.com>")
 
+RAZORPAY_KEY_ID = env("RAZORPAY_KEY_ID", default="")
+RAZORPAY_KEY_SECRET = env("RAZORPAY_KEY_SECRET", default="")
+RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
+
 
 # Defaults
 

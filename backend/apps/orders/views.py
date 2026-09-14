@@ -1,18 +1,33 @@
+import json
+
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny
 
 from apps.users.permissions import IsCustomer
 
-from .models import Cart, CartItem, Order
+from .models import Cart, CartItem, Order, Payment, PaymentStatus
+from .razorpay import (
+    RazorpayError,
+    capture_payment,
+    create_razorpay_order,
+    record_webhook,
+    verify_payment_signature,
+    verify_webhook_signature,
+)
 from .serializers import (
     AddCartItemSerializer,
     CartItemSerializer,
     CartSerializer,
     CheckoutSerializer,
     OrderSerializer,
+    RazorpayConfirmSerializer,
+    RazorpayOrderSerializer,
     UpdateCartItemSerializer,
 )
 from .services import add_to_cart, cancel_order, checkout, set_cart_item_quantity
@@ -122,3 +137,86 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         except DjangoValidationError as error:
             raise _service_error(error) from error
         return response.Response(self.get_serializer(order).data)
+
+
+class RazorpayOrderView(GenericAPIView):
+    serializer_class = RazorpayOrderSerializer
+    permission_classes = [IsCustomer]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = get_object_or_404(
+            Order,
+            user=request.user,
+            order_number=serializer.validated_data["order_number"],
+        )
+        payment = order.payments.filter(status=PaymentStatus.PENDING).first()
+        if payment is None:
+            raise ValidationError({"detail": "No payable balance exists."})
+        try:
+            payment = create_razorpay_order(payment)
+        except (RazorpayError, ImproperlyConfigured) as error:
+            raise ValidationError({"detail": str(error)}) from error
+        return response.Response(
+            {
+                "key_id": settings.RAZORPAY_KEY_ID,
+                "razorpay_order_id": payment.provider_order_id,
+                "amount": int(payment.amount * 100),
+                "currency": payment.currency,
+                "internal_order_number": order.order_number,
+            }
+        )
+
+
+class RazorpayConfirmView(GenericAPIView):
+    serializer_class = RazorpayConfirmSerializer
+    permission_classes = [IsCustomer]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        payment = get_object_or_404(
+            Payment,
+            order__user=request.user,
+            provider_order_id=data["razorpay_order_id"],
+        )
+        if not verify_payment_signature(
+            order_id=payment.provider_order_id,
+            payment_id=data["razorpay_payment_id"],
+            signature=data["razorpay_signature"],
+        ):
+            raise ValidationError({"detail": "Invalid payment signature."})
+        capture_payment(
+            provider_order_id=payment.provider_order_id,
+            provider_payment_id=data["razorpay_payment_id"],
+        )
+        return response.Response({"detail": "Payment confirmed."})
+
+
+class RazorpayWebhookView(GenericAPIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        signature = request.headers.get("X-Razorpay-Signature", "")
+        event_id = request.headers.get("X-Razorpay-Event-Id", "")
+        if (
+            not signature
+            or not event_id
+            or not verify_webhook_signature(raw_body=request.body, signature=signature)
+        ):
+            return response.Response(status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return response.Response(status=status.HTTP_400_BAD_REQUEST)
+        _, created = record_webhook(event_id=event_id, payload=payload)
+        if created and payload.get("event") == "payment.captured":
+            entity = payload["payload"]["payment"]["entity"]
+            capture_payment(
+                provider_order_id=entity["order_id"],
+                provider_payment_id=entity["id"],
+            )
+        return response.Response(status=status.HTTP_200_OK)

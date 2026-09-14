@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import Cart, CartItem, Order, OrderAddress, OrderItem, Payment, Shipment
+from .models import (
+    Cart,
+    CartItem,
+    Order,
+    OrderAddress,
+    OrderItem,
+    Payment,
+    PaymentWebhookEvent,
+    Shipment,
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -33,4 +42,5 @@ class OrderAdmin(admin.ModelAdmin):
 admin.site.register(Cart)
 admin.site.register(CartItem)
 admin.site.register(Payment)
+admin.site.register(PaymentWebhookEvent)
 admin.site.register(Shipment)

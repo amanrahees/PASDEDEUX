@@ -152,6 +152,7 @@ class Payment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="payments")
     provider = models.CharField(max_length=40, default="UNASSIGNED")
+    provider_order_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
     provider_payment_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
     idempotency_key = models.CharField(max_length=100, unique=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -165,6 +166,21 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.order.order_number} {self.status}"
+
+
+class PaymentWebhookEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.CharField(max_length=40, default="RAZORPAY")
+    event_id = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=100)
+    payload = models.JSONField()
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-processed_at",)
+
+    def __str__(self):
+        return f"{self.provider} {self.event_type} {self.event_id}"
 
 
 class Shipment(models.Model):
