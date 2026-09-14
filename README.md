@@ -99,6 +99,9 @@ Celery worker and beat services must both be running.
 
 Returns are accepted per order item for seven days after delivery. Administrators
 review requests before the worker submits a prorated, idempotent Razorpay refund.
+Unpaid orders cancel immediately and release reservations. Paid or processing
+orders can be cancelled before shipment; they enter `CANCELLATION_PENDING` while
+Celery completes a full Razorpay refund, then inventory is restored atomically.
 
 ### Customer engagement
 

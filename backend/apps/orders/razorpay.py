@@ -15,6 +15,8 @@ from django.utils import timezone
 from apps.catalog.models import ProductVariant
 
 from .models import (
+    Coupon,
+    Order,
     OrderStatus,
     Payment,
     PaymentStatus,
@@ -238,4 +240,68 @@ def refund_return(return_request_id):
             else PaymentStatus.PARTIALLY_REFUNDED
         )
         refund.payment.save(update_fields=["status", "updated_at"])
+        return refund
+
+
+def refund_order_cancellation(order_id):
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order_id)
+        existing = Refund.objects.filter(
+            payment__order=order, idempotency_key=f"cancel-{order.pk}"
+        ).first()
+        if order.status == OrderStatus.CANCELLED and existing:
+            return existing
+        if order.status != OrderStatus.CANCELLATION_PENDING:
+            raise ValidationError("This order is not awaiting cancellation.")
+        payment = (
+            order.payments.select_for_update()
+            .filter(
+                status=PaymentStatus.CAPTURED,
+                provider_payment_id__isnull=False,
+            )
+            .first()
+        )
+        if payment is None:
+            raise ValidationError("No captured payment is available to refund.")
+        refund, _ = Refund.objects.get_or_create(
+            payment=payment,
+            idempotency_key=f"cancel-{order.pk}",
+            defaults={"amount": payment.amount},
+        )
+
+    result = _request(
+        f"payments/{payment.provider_payment_id}/refund",
+        {
+            "amount": int(refund.amount * 100),
+            "notes": {"cancelled_order_id": str(order.pk)},
+        },
+        {"X-Razorpay-Idempotency-Key": refund.idempotency_key},
+    )
+    provider_refund_id = result.get("id")
+    if not provider_refund_id:
+        raise RazorpayError("Razorpay returned an invalid refund response.")
+
+    with transaction.atomic():
+        refund = Refund.objects.select_for_update().get(pk=refund.pk)
+        if refund.status == RefundStatus.PROCESSED:
+            return refund
+        order = Order.objects.select_for_update().get(pk=order_id)
+        if order.status != OrderStatus.CANCELLATION_PENDING:
+            raise ValidationError("The order cancellation state changed.")
+        for item in order.items.select_related("variant"):
+            if item.variant_id:
+                ProductVariant.objects.filter(pk=item.variant_id).update(
+                    stock_quantity=F("stock_quantity") + item.quantity
+                )
+        refund.provider_refund_id = provider_refund_id
+        refund.status = RefundStatus.PROCESSED
+        refund.save(update_fields=["provider_refund_id", "status", "updated_at"])
+        refund.payment.status = PaymentStatus.REFUNDED
+        refund.payment.save(update_fields=["status", "updated_at"])
+        order.status = OrderStatus.CANCELLED
+        order.save(update_fields=["status", "updated_at"])
+        if order.coupon_id:
+            Coupon.objects.filter(pk=order.coupon_id, times_used__gt=0).update(
+                times_used=F("times_used") - 1
+            )
         return refund

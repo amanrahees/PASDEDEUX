@@ -22,7 +22,7 @@ from ..models import (
     ReturnStatus,
     Shipment,
 )
-from ..razorpay import refund_return
+from ..razorpay import refund_order_cancellation, refund_return
 
 
 @pytest.fixture
@@ -172,3 +172,36 @@ def test_approved_return_creates_idempotent_prorated_refund(delivered_order, mon
     assert len(calls) == 1
     return_request.refresh_from_db()
     assert return_request.status == ReturnStatus.REFUNDED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_paid_order_cancellation_refunds_and_restocks(delivered_order, monkeypatch):
+    _, order, item, client = delivered_order
+    order.status = OrderStatus.PAID
+    order.save(update_fields=["status"])
+    order.shipments.all().delete()
+    variant = item.variant
+    variant.stock_quantity = 8
+    variant.save(update_fields=["stock_quantity"])
+    dispatched = []
+    monkeypatch.setattr("apps.orders.tasks.process_order_cancellation.delay", dispatched.append)
+
+    response = client.post(reverse("order-cancel", kwargs={"order_number": order.order_number}))
+
+    assert response.status_code == 200
+    assert response.data["status"] == OrderStatus.CANCELLATION_PENDING
+    assert dispatched == [str(order.pk)]
+
+    monkeypatch.setattr(
+        "apps.orders.razorpay._request",
+        lambda path, payload, extra_headers=None: {"id": "rfnd_cancel_123"},
+    )
+    refund = refund_order_cancellation(order.pk)
+
+    order.refresh_from_db()
+    variant.refresh_from_db()
+    refund.payment.refresh_from_db()
+    assert order.status == OrderStatus.CANCELLED
+    assert refund.amount == Decimal("1800.00")
+    assert refund.payment.status == PaymentStatus.REFUNDED
+    assert variant.stock_quantity == 10

@@ -207,8 +207,20 @@ def checkout(*, user, shipping_address_id, billing_address_id, idempotency_key, 
 @transaction.atomic
 def cancel_order(*, order):
     order = Order.objects.select_for_update().get(pk=order.pk)
+    if order.status in (OrderStatus.PAID, OrderStatus.PROCESSING):
+        if order.shipments.filter(shipped_at__isnull=False).exists():
+            raise ValidationError("This order has already shipped and cannot be cancelled.")
+        payment = order.payments.filter(status=PaymentStatus.CAPTURED).first()
+        if payment is None:
+            raise ValidationError("The captured payment could not be found.")
+        order.status = OrderStatus.CANCELLATION_PENDING
+        order.save(update_fields=["status", "updated_at"])
+        from .tasks import process_order_cancellation
+
+        transaction.on_commit(lambda: process_order_cancellation.delay(str(order.pk)))
+        return order
     if order.status != OrderStatus.PAYMENT_PENDING:
-        raise ValidationError("Only unpaid orders can be cancelled by the customer.")
+        raise ValidationError("This order can no longer be cancelled.")
     if order.payments.filter(
         status__in=(PaymentStatus.AUTHORIZED, PaymentStatus.CAPTURED)
     ).exists():

@@ -48,6 +48,7 @@ class OrderStatus(models.TextChoices):
     PAYMENT_PENDING = "PAYMENT_PENDING", "Payment pending"
     PAID = "PAID", "Paid"
     PROCESSING = "PROCESSING", "Processing"
+    CANCELLATION_PENDING = "CANCELLATION_PENDING", "Cancellation pending"
     SHIPPED = "SHIPPED", "Shipped"
     DELIVERED = "DELIVERED", "Delivered"
     CANCELLED = "CANCELLED", "Cancelled"
@@ -314,7 +315,11 @@ class RefundStatus(models.TextChoices):
 class Refund(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     return_request = models.OneToOneField(
-        ReturnRequest, on_delete=models.PROTECT, related_name="refund"
+        ReturnRequest,
+        on_delete=models.PROTECT,
+        related_name="refund",
+        blank=True,
+        null=True,
     )
     payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
     amount = models.DecimalField(max_digits=12, decimal_places=2)
