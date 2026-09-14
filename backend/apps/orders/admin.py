@@ -9,8 +9,12 @@ from .models import (
     OrderItem,
     Payment,
     PaymentWebhookEvent,
+    Refund,
+    ReturnRequest,
+    ReturnStatus,
     Shipment,
 )
+from .tasks import process_return_refund
 
 
 class OrderItemInline(admin.TabularInline):
@@ -60,3 +64,55 @@ admin.site.register(Coupon)
 admin.site.register(Payment)
 admin.site.register(PaymentWebhookEvent)
 admin.site.register(Shipment)
+
+
+@admin.register(ReturnRequest)
+class ReturnRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "user",
+        "reason",
+        "quantity",
+        "status",
+        "requested_at",
+    )
+    list_filter = ("status", "reason", "requested_at")
+    search_fields = ("order__order_number", "user__email", "order_item__sku")
+    readonly_fields = ("user", "order", "order_item", "quantity", "requested_at")
+    actions = ("approve_and_refund", "reject_returns")
+
+    @admin.action(description="Approve and start Razorpay refund")
+    def approve_and_refund(self, request, queryset):
+        return_ids = list(
+            queryset.filter(status=ReturnStatus.REQUESTED).values_list("pk", flat=True)
+        )
+        ReturnRequest.objects.filter(pk__in=return_ids).update(status=ReturnStatus.APPROVED)
+        for return_id in return_ids:
+            process_return_refund.delay(str(return_id))
+
+    @admin.action(description="Reject selected return requests")
+    def reject_returns(self, request, queryset):
+        queryset.filter(status=ReturnStatus.REQUESTED).update(status=ReturnStatus.REJECTED)
+
+
+@admin.register(Refund)
+class RefundAdmin(admin.ModelAdmin):
+    list_display = ("id", "return_request", "amount", "status", "provider_refund_id")
+    list_filter = ("status",)
+    search_fields = (
+        "return_request__order__order_number",
+        "provider_refund_id",
+        "payment__provider_payment_id",
+    )
+    readonly_fields = (
+        "return_request",
+        "payment",
+        "amount",
+        "provider_refund_id",
+        "idempotency_key",
+        "status",
+        "failure_reason",
+        "created_at",
+        "updated_at",
+    )

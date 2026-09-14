@@ -198,6 +198,7 @@ class PaymentStatus(models.TextChoices):
     AUTHORIZED = "AUTHORIZED", "Authorized"
     CAPTURED = "CAPTURED", "Captured"
     FAILED = "FAILED", "Failed"
+    PARTIALLY_REFUNDED = "PARTIALLY_REFUNDED", "Partially refunded"
     REFUNDED = "REFUNDED", "Refunded"
 
 
@@ -249,3 +250,82 @@ class Shipment(models.Model):
 
     def __str__(self):
         return self.tracking_number
+
+
+class ReturnReason(models.TextChoices):
+    WRONG_SIZE = "WRONG_SIZE", "Wrong size"
+    DEFECTIVE = "DEFECTIVE", "Defective"
+    NOT_AS_DESCRIBED = "NOT_AS_DESCRIBED", "Not as described"
+    OTHER = "OTHER", "Other"
+
+
+class ReturnStatus(models.TextChoices):
+    REQUESTED = "REQUESTED", "Requested"
+    APPROVED = "APPROVED", "Approved"
+    REJECTED = "REJECTED", "Rejected"
+    REFUND_PENDING = "REFUND_PENDING", "Refund pending"
+    REFUNDED = "REFUNDED", "Refunded"
+    CANCELLED = "CANCELLED", "Cancelled"
+
+
+class ReturnRequest(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="return_requests",
+    )
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="return_requests")
+    order_item = models.ForeignKey(
+        OrderItem, on_delete=models.PROTECT, related_name="return_requests"
+    )
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    reason = models.CharField(max_length=24, choices=ReturnReason.choices)
+    details = models.TextField(max_length=2000, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=ReturnStatus.choices,
+        default=ReturnStatus.REQUESTED,
+        db_index=True,
+    )
+    admin_note = models.TextField(max_length=2000, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-requested_at",)
+        indexes = [models.Index(fields=["order", "status"])]
+
+    def __str__(self):
+        return f"Return {self.id} for {self.order.order_number}"
+
+    @property
+    def order_number(self):
+        return self.order.order_number
+
+
+class RefundStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    PROCESSED = "PROCESSED", "Processed"
+    FAILED = "FAILED", "Failed"
+
+
+class Refund(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    return_request = models.OneToOneField(
+        ReturnRequest, on_delete=models.PROTECT, related_name="refund"
+    )
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    provider_refund_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
+    idempotency_key = models.CharField(max_length=100, unique=True)
+    status = models.CharField(
+        max_length=12, choices=RefundStatus.choices, default=RefundStatus.PENDING
+    )
+    failure_reason = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Refund {self.id} ({self.status})"

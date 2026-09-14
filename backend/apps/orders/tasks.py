@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from .models import Order, OrderStatus
+from .razorpay import RazorpayError, refund_return
 from .services import cancel_order
 
 
@@ -25,3 +26,14 @@ def release_expired_reservations():
             continue
         released += 1
     return released
+
+
+@shared_task(
+    autoretry_for=(RazorpayError,),
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def process_return_refund(return_request_id):
+    refund = refund_return(return_request_id)
+    return str(refund.pk)

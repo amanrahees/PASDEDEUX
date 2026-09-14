@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.utils import timezone
 
 from apps.catalog.models import ProductStatus, ProductVariant
@@ -24,6 +24,8 @@ from .models import (
     OrderStatus,
     Payment,
     PaymentStatus,
+    ReturnRequest,
+    ReturnStatus,
 )
 
 
@@ -223,3 +225,44 @@ def cancel_order(*, order):
         )
     order.save(update_fields=["status", "updated_at"])
     return order
+
+
+@transaction.atomic
+def create_return_request(*, user, order_number, order_item_id, quantity, reason, details=""):
+    try:
+        order = Order.objects.select_for_update().get(order_number=order_number, user=user)
+    except Order.DoesNotExist as error:
+        raise ValidationError("The selected order does not exist.") from error
+    if order.status != OrderStatus.DELIVERED:
+        raise ValidationError("Returns are available only after delivery.")
+
+    delivered_at = (
+        order.shipments.filter(delivered_at__isnull=False)
+        .order_by("-delivered_at")
+        .values_list("delivered_at", flat=True)
+        .first()
+    )
+    if delivered_at is None or delivered_at < timezone.now() - timedelta(days=7):
+        raise ValidationError("The seven-day return window has closed.")
+
+    try:
+        item = order.items.select_for_update().get(pk=order_item_id)
+    except OrderItem.DoesNotExist as error:
+        raise ValidationError("The selected item does not belong to this order.") from error
+    already_requested = (
+        item.return_requests.exclude(
+            status__in=(ReturnStatus.REJECTED, ReturnStatus.CANCELLED)
+        ).aggregate(total=Sum("quantity"))["total"]
+        or 0
+    )
+    if quantity + already_requested > item.quantity:
+        raise ValidationError("The return quantity exceeds the eligible quantity.")
+
+    return ReturnRequest.objects.create(
+        user=user,
+        order=order,
+        order_item=item,
+        quantity=quantity,
+        reason=reason,
+        details=details,
+    )

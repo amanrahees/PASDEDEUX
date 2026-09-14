@@ -88,11 +88,16 @@ Catalog writes and variant/image management require a staff account.
 - `GET /api/v1/orders/`
 - `GET /api/v1/orders/{order_number}/`
 - `POST /api/v1/orders/{order_number}/cancel/`
+- `GET/POST /api/v1/returns/`
+- `GET /api/v1/returns/{id}/`
 
 Checkout requires a unique `Idempotency-Key` request header. Repeating the same
 key returns the original order without reserving stock twice. Pass an optional
 `coupon_code` in the JSON body. Unpaid reservations expire automatically; the
 Celery worker and beat services must both be running.
+
+Returns are accepted per order item for seven days after delivery. Administrators
+review requests before the worker submits a prorated, idempotent Razorpay refund.
 
 ### Customer engagement
 

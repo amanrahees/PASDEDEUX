@@ -10,6 +10,8 @@ from .views import (
     RazorpayConfirmView,
     RazorpayOrderView,
     RazorpayWebhookView,
+    ReturnRequestDetailView,
+    ReturnRequestListView,
 )
 
 router = DefaultRouter()
@@ -23,5 +25,7 @@ urlpatterns = [
     path("payments/razorpay/order/", RazorpayOrderView.as_view(), name="razorpay-order"),
     path("payments/razorpay/confirm/", RazorpayConfirmView.as_view(), name="razorpay-confirm"),
     path("payments/razorpay/webhook/", RazorpayWebhookView.as_view(), name="razorpay-webhook"),
+    path("returns/", ReturnRequestListView.as_view(), name="returns"),
+    path("returns/<uuid:pk>/", ReturnRequestDetailView.as_view(), name="return-detail"),
 ]
 urlpatterns += router.urls

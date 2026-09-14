@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -5,7 +6,16 @@ from apps.catalog.models import ProductVariant
 from apps.catalog.serializers import ProductVariantSerializer
 from apps.customers.models import Address
 
-from .models import Cart, CartItem, Order, OrderAddress, OrderItem, Payment, Shipment
+from .models import (
+    Cart,
+    CartItem,
+    Order,
+    OrderAddress,
+    OrderItem,
+    Payment,
+    ReturnRequest,
+    Shipment,
+)
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -140,3 +150,47 @@ class OrderSerializer(serializers.ModelSerializer):
             "placed_at",
             "updated_at",
         )
+
+
+class ReturnRequestSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField()
+    order_item_id = serializers.UUIDField()
+    product_name = serializers.CharField(source="order_item.product_name", read_only=True)
+    sku = serializers.CharField(source="order_item.sku", read_only=True)
+
+    class Meta:
+        model = ReturnRequest
+        fields = (
+            "id",
+            "order_number",
+            "order_item_id",
+            "product_name",
+            "sku",
+            "quantity",
+            "reason",
+            "details",
+            "status",
+            "admin_note",
+            "requested_at",
+            "resolved_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "admin_note",
+            "requested_at",
+            "resolved_at",
+        )
+
+    def create(self, validated_data):
+        from .services import create_return_request
+
+        try:
+            return create_return_request(
+                user=self.context["request"].user,
+                order_number=validated_data.pop("order_number"),
+                order_item_id=validated_data.pop("order_item_id"),
+                **validated_data,
+            )
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"detail": error.messages}) from error

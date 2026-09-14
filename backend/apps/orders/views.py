@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny
 
 from apps.users.permissions import IsCustomer
@@ -30,6 +30,7 @@ from .serializers import (
     OrderSerializer,
     RazorpayConfirmSerializer,
     RazorpayOrderSerializer,
+    ReturnRequestSerializer,
     UpdateCartItemSerializer,
 )
 from .services import add_to_cart, cancel_order, checkout, set_cart_item_quantity
@@ -140,6 +141,22 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         except DjangoValidationError as error:
             raise _service_error(error) from error
         return response.Response(self.get_serializer(order).data)
+
+
+class ReturnRequestListView(ListCreateAPIView):
+    serializer_class = ReturnRequestSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        return self.request.user.return_requests.select_related("order", "order_item")
+
+
+class ReturnRequestDetailView(RetrieveAPIView):
+    serializer_class = ReturnRequestSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        return self.request.user.return_requests.select_related("order", "order_item")
 
 
 class RazorpayOrderView(GenericAPIView):
