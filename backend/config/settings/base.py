@@ -140,7 +140,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
@@ -198,6 +198,12 @@ SPECTACULAR_SETTINGS = {
     "SERVE_PERMISSIONS": [
         "rest_framework.permissions.IsAdminUser",
     ],
+    "ENUM_NAME_OVERRIDES": {
+        "AccountStatusEnum": "apps.users.models.AccountStatus.choices",
+        "ProductStatusEnum": "apps.catalog.models.ProductStatus.choices",
+        "OrderStatusEnum": "apps.orders.models.OrderStatus.choices",
+        "PaymentStatusEnum": "apps.orders.models.PaymentStatus.choices",
+    },
 }
 
 

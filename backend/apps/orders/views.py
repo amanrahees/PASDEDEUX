@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.views import APIView
+from rest_framework.generics import GenericAPIView
 
 from apps.users.permissions import IsCustomer
 
@@ -23,7 +23,8 @@ def _service_error(error):
     return ValidationError({"detail": messages})
 
 
-class CartView(APIView):
+class CartView(GenericAPIView):
+    serializer_class = CartSerializer
     permission_classes = [IsCustomer]
 
     def get(self, request):
@@ -32,7 +33,8 @@ class CartView(APIView):
         return response.Response(CartSerializer(cart).data)
 
 
-class CartItemCollectionView(APIView):
+class CartItemCollectionView(GenericAPIView):
+    serializer_class = AddCartItemSerializer
     permission_classes = [IsCustomer]
 
     def post(self, request):
@@ -49,7 +51,8 @@ class CartItemCollectionView(APIView):
         return response.Response(CartItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
-class CartItemDetailView(APIView):
+class CartItemDetailView(GenericAPIView):
+    serializer_class = UpdateCartItemSerializer
     permission_classes = [IsCustomer]
 
     def patch(self, request, item_id):
@@ -71,7 +74,8 @@ class CartItemDetailView(APIView):
         return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class CheckoutView(APIView):
+class CheckoutView(GenericAPIView):
+    serializer_class = CheckoutSerializer
     permission_classes = [IsCustomer]
 
     def post(self, request):
@@ -101,6 +105,7 @@ class CheckoutView(APIView):
 
 
 class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsCustomer]
     lookup_field = "order_number"

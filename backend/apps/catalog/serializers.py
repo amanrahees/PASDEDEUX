@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Brand, Category, Product, ProductImage, ProductVariant
@@ -80,10 +81,12 @@ class ProductListSerializer(serializers.ModelSerializer):
             "is_featured",
         )
 
+    @extend_schema_field(ProductImageSerializer(allow_null=True))
     def get_primary_image(self, product):
         image = next(iter(product.images.all()), None)
         return ProductImageSerializer(image, context=self.context).data if image else None
 
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
     def get_minimum_price(self, product):
         prices = [variant.price for variant in product.variants.all() if variant.is_active]
         return min(prices, default=product.base_price)

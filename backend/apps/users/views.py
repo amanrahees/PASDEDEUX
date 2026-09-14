@@ -1,9 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import status
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import AccountStatus
@@ -20,7 +20,8 @@ from .serializers import (
 from .tasks import send_password_reset_email, send_verification_otp_email
 
 
-class RegistrationView(APIView):
+class RegistrationView(GenericAPIView):
+    serializer_class = RegistrationSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
@@ -37,7 +38,8 @@ class RegistrationView(APIView):
         )
 
 
-class VerifyEmailOTPView(APIView):
+class VerifyEmailOTPView(GenericAPIView):
+    serializer_class = VerifyEmailOTPSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_email"
@@ -48,7 +50,8 @@ class VerifyEmailOTPView(APIView):
         return Response({"detail": "Email verified successfully."})
 
 
-class ResendVerificationOTPView(APIView):
+class ResendVerificationOTPView(GenericAPIView):
+    serializer_class = EmailSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_email"
@@ -75,7 +78,8 @@ class ResendVerificationOTPView(APIView):
         return Response({"detail": "If an eligible account exists, an OTP has been sent."})
 
 
-class LoginView(APIView):
+class LoginView(GenericAPIView):
+    serializer_class = LoginSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
@@ -99,7 +103,8 @@ class RefreshView(TokenRefreshView):
     throttle_scope = "auth_refresh"
 
 
-class LogoutView(APIView):
+class LogoutView(GenericAPIView):
+    serializer_class = LogoutSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -109,7 +114,8 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ForgotPasswordView(APIView):
+class ForgotPasswordView(GenericAPIView):
+    serializer_class = EmailSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_password"
@@ -131,7 +137,8 @@ class ForgotPasswordView(APIView):
         return Response({"detail": "If an eligible account exists, a reset email has been sent."})
 
 
-class ResetPasswordView(APIView):
+class ResetPasswordView(GenericAPIView):
+    serializer_class = PasswordResetConfirmSerializer
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_password"
@@ -143,7 +150,8 @@ class ResetPasswordView(APIView):
         return Response({"detail": "Password reset successfully."})
 
 
-class CurrentUserView(APIView):
+class CurrentUserView(GenericAPIView):
+    serializer_class = CurrentUserSerializer
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

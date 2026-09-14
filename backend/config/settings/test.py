@@ -7,6 +7,12 @@ DATABASES = {
     }
 }
 
+MIDDLEWARE = [
+    middleware
+    for middleware in MIDDLEWARE  # noqa: F405
+    if middleware != "whitenoise.middleware.WhiteNoiseMiddleware"
+]
+
 # Runtime behavior
 
 DEBUG = False

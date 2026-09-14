@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.catalog.models import ProductVariant
@@ -15,6 +16,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = ("id", "variant", "quantity", "line_total", "updated_at")
 
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
     def get_line_total(self, item):
         return item.variant.price * item.quantity
 
@@ -27,6 +29,7 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ("id", "items", "subtotal", "updated_at")
 
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
     def get_subtotal(self, cart):
         return sum((item.variant.price * item.quantity for item in cart.items.all()), 0)
 
@@ -49,7 +52,9 @@ class CheckoutSerializer(serializers.Serializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context["request"]
-        addresses = Address.objects.filter(user=request.user, is_active=True)
+        addresses = Address.objects.none()
+        if request.user.is_authenticated:
+            addresses = Address.objects.filter(user=request.user, is_active=True)
         self.fields["shipping_address"].queryset = addresses
         self.fields["billing_address"].queryset = addresses
 
