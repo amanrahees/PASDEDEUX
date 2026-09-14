@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.customers",
     "apps.catalog",
+    "apps.orders",
 ]
 
 
