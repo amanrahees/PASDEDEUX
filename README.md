@@ -16,6 +16,7 @@ eyewear, belts, caps, and accessories for everyone.
 - Idempotent checkout with coupons, configurable domestic/international shipping,
   and immutable order/address/item snapshots
 - Wishlists, moderated ratings/reviews, recently viewed products, and recommendations
+- Superuser sales dashboard, moderation APIs, and scheduled low-stock email alerts
 - Signed Razorpay checkout callbacks and idempotent webhook processing
 - Provider-neutral payment records and shipment tracking
 - PostgreSQL, Redis, Celery workers/beat, Gunicorn, health checks, and OpenAPI documentation
@@ -109,6 +110,17 @@ review requests before the worker submits a prorated, idempotent Razorpay refund
 
 New reviews stay pending until an administrator approves them. The API marks a
 review as a verified purchase when the customer has a paid order for that product.
+
+### Back office
+
+- `GET /api/v1/admin/dashboard/`
+- `GET /api/v1/admin/sales/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+- `GET /api/v1/admin/low-stock/`
+- `POST /api/v1/admin/returns/{id}/moderate/`
+- `POST /api/v1/admin/reviews/{id}/moderate/`
+
+These routes require a superuser. Low-stock email alerts run every six hours through
+Celery Beat and use `LOW_STOCK_THRESHOLD` plus `LOW_STOCK_NOTIFICATION_EMAILS`.
 
 ## Filtering examples
 

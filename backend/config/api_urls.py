@@ -6,4 +6,5 @@ urlpatterns = [
     path("v1/", include("apps.customers.urls")),
     path("v1/", include("apps.orders.urls")),
     path("v1/", include("apps.engagement.urls")),
+    path("v1/admin/", include("apps.backoffice.urls")),
 ]

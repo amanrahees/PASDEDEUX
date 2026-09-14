@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.catalog",
     "apps.orders",
     "apps.engagement",
+    "apps.backoffice",
 ]
 
 
@@ -294,12 +295,18 @@ DOMESTIC_SHIPPING_RATE = env("DOMESTIC_SHIPPING_RATE", cast=Decimal, default=Dec
 INTERNATIONAL_SHIPPING_RATE = env(
     "INTERNATIONAL_SHIPPING_RATE", cast=Decimal, default=Decimal("1499.00")
 )
+LOW_STOCK_THRESHOLD = env.int("LOW_STOCK_THRESHOLD", default=5)
+LOW_STOCK_NOTIFICATION_EMAILS = env.list("LOW_STOCK_NOTIFICATION_EMAILS", default=[])
 
 CELERY_BEAT_SCHEDULE = {
     "release-expired-stock-reservations": {
         "task": "apps.orders.tasks.release_expired_reservations",
         "schedule": 60.0,
-    }
+    },
+    "send-low-stock-notifications": {
+        "task": "apps.backoffice.tasks.send_low_stock_notification",
+        "schedule": 21600.0,
+    },
 }
 
 
