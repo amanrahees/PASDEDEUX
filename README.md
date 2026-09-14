@@ -15,6 +15,7 @@ eyewear, belts, caps, and accessories for everyone.
 - Customer cart with quantity and availability validation
 - Idempotent checkout with coupons, configurable domestic/international shipping,
   and immutable order/address/item snapshots
+- Wishlists, moderated ratings/reviews, recently viewed products, and recommendations
 - Signed Razorpay checkout callbacks and idempotent webhook processing
 - Provider-neutral payment records and shipment tracking
 - PostgreSQL, Redis, Celery workers/beat, Gunicorn, health checks, and OpenAPI documentation
@@ -92,6 +93,17 @@ Checkout requires a unique `Idempotency-Key` request header. Repeating the same
 key returns the original order without reserving stock twice. Pass an optional
 `coupon_code` in the JSON body. Unpaid reservations expire automatically; the
 Celery worker and beat services must both be running.
+
+### Customer engagement
+
+- `GET/POST /api/v1/wishlist/`
+- `DELETE /api/v1/wishlist/{product_id}/`
+- `GET/POST /api/v1/products/{slug}/reviews/`
+- `GET /api/v1/recently-viewed/`
+- `GET /api/v1/recommendations/`
+
+New reviews stay pending until an administrator approves them. The API marks a
+review as a verified purchase when the customer has a paid order for that product.
 
 ## Filtering examples
 

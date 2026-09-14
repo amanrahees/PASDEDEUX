@@ -1,6 +1,6 @@
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from rest_framework import filters, response, viewsets
 from rest_framework.permissions import IsAdminUser
 
 from .models import Brand, Category, Product, ProductImage, ProductStatus, ProductVariant
@@ -64,6 +64,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             return ProductDetailSerializer
         return ProductListSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        from apps.engagement.views import record_product_view
+
+        record_product_view(user=request.user, product=instance)
+        return response.Response(self.get_serializer(instance).data)
 
 
 class ProductVariantViewSet(viewsets.ModelViewSet):
