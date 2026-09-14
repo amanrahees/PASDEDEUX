@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.core",
     "apps.customers",
+    "apps.catalog",
 ]
 
 
