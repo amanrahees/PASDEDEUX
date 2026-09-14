@@ -173,7 +173,16 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "sub",
+    "USER_AUTHENTICATION_RULE": "apps.users.authentication.jwt_user_authentication_rule",
 }
+
+EMAIL_VERIFICATION_OTP_TTL_SECONDS = env.int("EMAIL_VERIFICATION_OTP_TTL_SECONDS", default=600)
+EMAIL_VERIFICATION_OTP_COOLDOWN_SECONDS = env.int(
+    "EMAIL_VERIFICATION_OTP_COOLDOWN_SECONDS", default=60
+)
+EMAIL_VERIFICATION_OTP_MAX_ATTEMPTS = env.int("EMAIL_VERIFICATION_OTP_MAX_ATTEMPTS", default=5)
+AUTH_FRONTEND_URL = env("AUTH_FRONTEND_URL", default="http://localhost:3000")
+PASSWORD_RESET_TIMEOUT = env.int("PASSWORD_RESET_TIMEOUT", default=3600)
 
 
 # API documentation
