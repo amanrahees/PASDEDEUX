@@ -15,6 +15,7 @@ from apps.orders.models import (
     ReturnReason,
     ReturnRequest,
     ReturnStatus,
+    Shipment,
 )
 
 
@@ -137,3 +138,49 @@ def test_approved_return_dispatches_refund_job(monkeypatch, store_data):
     assert response.status_code == 200
     assert return_request.status == ReturnStatus.APPROVED
     assert dispatched == [str(return_request.pk)]
+
+
+@pytest.mark.django_db
+def test_superuser_can_progress_order_through_fulfillment(admin_client, store_data):
+    _, _, _, order, _ = store_data
+    url = reverse("backoffice-fulfillment", kwargs={"order_number": order.order_number})
+
+    processing = admin_client.post(url, {"status": OrderStatus.PROCESSING}, format="json")
+    shipped = admin_client.post(
+        url,
+        {
+            "status": OrderStatus.SHIPPED,
+            "carrier": "DHL",
+            "tracking_number": "DHL-TRACK-001",
+        },
+        format="json",
+    )
+    delivered = admin_client.post(url, {"status": OrderStatus.DELIVERED}, format="json")
+
+    order.refresh_from_db()
+    shipment = Shipment.objects.get(order=order)
+    assert processing.status_code == 200
+    assert shipped.status_code == 200
+    assert delivered.status_code == 200
+    assert order.status == OrderStatus.DELIVERED
+    assert shipment.shipped_at is not None
+    assert shipment.delivered_at is not None
+
+
+@pytest.mark.django_db
+def test_fulfillment_cannot_skip_statuses(admin_client, store_data):
+    _, _, _, order, _ = store_data
+
+    response = admin_client.post(
+        reverse("backoffice-fulfillment", kwargs={"order_number": order.order_number}),
+        {
+            "status": OrderStatus.SHIPPED,
+            "carrier": "DHL",
+            "tracking_number": "DHL-TRACK-SKIP",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    order.refresh_from_db()
+    assert order.status == OrderStatus.PAID

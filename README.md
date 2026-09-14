@@ -117,6 +117,8 @@ review as a verified purchase when the customer has a paid order for that produc
 ### Back office
 
 - `GET /api/v1/admin/dashboard/`
+- `GET /api/v1/admin/orders/?status=PAID&search=customer@example.com`
+- `POST /api/v1/admin/orders/{order_number}/fulfillment/`
 - `GET /api/v1/admin/sales/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
 - `GET /api/v1/admin/low-stock/`
 - `POST /api/v1/admin/returns/{id}/moderate/`

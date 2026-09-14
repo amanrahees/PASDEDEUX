@@ -1,14 +1,14 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.db.models import Count, F, Sum
+from django.db import IntegrityError, transaction
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import response
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView
 
 from apps.catalog.models import Product, ProductStatus, ProductVariant
 from apps.engagement.models import ProductReview, ReviewStatus
@@ -19,12 +19,18 @@ from apps.orders.models import (
     RefundStatus,
     ReturnRequest,
     ReturnStatus,
+    Shipment,
 )
 from apps.orders.serializers import ReturnRequestSerializer
 from apps.orders.tasks import process_return_refund
 
 from .permissions import IsSuperuser
-from .serializers import ReturnModerationSerializer, ReviewModerationSerializer
+from .serializers import (
+    BackofficeOrderSerializer,
+    FulfillmentSerializer,
+    ReturnModerationSerializer,
+    ReviewModerationSerializer,
+)
 
 SALE_STATUSES = (
     OrderStatus.PAID,
@@ -95,6 +101,77 @@ class SalesReportView(GenericAPIView):
             .order_by("date")
         )
         return response.Response(list(rows))
+
+
+class BackofficeOrderListView(ListAPIView):
+    permission_classes = [IsSuperuser]
+    serializer_class = BackofficeOrderSerializer
+
+    def get_queryset(self):
+        queryset = Order.objects.select_related("user").prefetch_related(
+            "items", "addresses", "payments", "shipments"
+        )
+        order_status = self.request.query_params.get("status")
+        if order_status:
+            if order_status not in OrderStatus.values:
+                raise ValidationError({"status": "Unknown order status."})
+            queryset = queryset.filter(status=order_status)
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(order_number__icontains=search) | Q(user__email__icontains=search)
+            )
+        return queryset
+
+
+class FulfillmentView(GenericAPIView):
+    permission_classes = [IsSuperuser]
+    serializer_class = FulfillmentSerializer
+
+    @transaction.atomic
+    def post(self, request, order_number):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = get_object_or_404(
+            Order.objects.select_for_update().prefetch_related(
+                "items", "addresses", "payments", "shipments"
+            ),
+            order_number=order_number,
+        )
+        target = serializer.validated_data["status"]
+        allowed = {
+            OrderStatus.PAID: OrderStatus.PROCESSING,
+            OrderStatus.PROCESSING: OrderStatus.SHIPPED,
+            OrderStatus.SHIPPED: OrderStatus.DELIVERED,
+        }
+        if allowed.get(order.status) != target:
+            raise ValidationError(f"Order cannot move from {order.status} to {target}.")
+        if target == OrderStatus.SHIPPED:
+            try:
+                Shipment.objects.create(
+                    order=order,
+                    carrier=serializer.validated_data["carrier"],
+                    tracking_number=serializer.validated_data["tracking_number"],
+                    shipped_at=timezone.now(),
+                )
+            except IntegrityError as error:
+                raise ValidationError("That tracking number is already in use.") from error
+        elif target == OrderStatus.DELIVERED:
+            shipment = (
+                order.shipments.filter(shipped_at__isnull=False).order_by("-shipped_at").first()
+            )
+            if shipment is None:
+                raise ValidationError("A shipped order must have shipment details.")
+            shipment.delivered_at = timezone.now()
+            shipment.save(update_fields=["delivered_at", "updated_at"])
+        order.status = target
+        order.save(update_fields=["status", "updated_at"])
+        order = (
+            Order.objects.select_related("user")
+            .prefetch_related("items", "addresses", "payments", "shipments")
+            .get(pk=order.pk)
+        )
+        return response.Response(BackofficeOrderSerializer(order).data)
 
 
 class LowStockView(GenericAPIView):
